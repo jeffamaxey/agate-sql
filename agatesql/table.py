@@ -109,7 +109,9 @@ def from_sql(cls, connection_or_string, table_name):
         elif py_type is datetime.timedelta:
             column_types.append(agate.TimeDelta())
         else:
-            raise ValueError('Unsupported sqlalchemy column type: %s' % type(sql_column.type))
+            raise ValueError(
+                f'Unsupported sqlalchemy column type: {type(sql_column.type)}'
+            )
 
     s = select([sql_table])
 
@@ -140,9 +142,7 @@ def from_sql_query(self, query):
     # @see https://bitbucket.org/zzzeek/sqlalchemy/commits/5bc1f17cb53248e7cea609693a3b2a9bb702545b
     rows = connection.execute(query.replace('%', '%%'))
 
-    table = agate.Table(list(rows), column_names=rows._metadata.keys)
-
-    return table
+    return agate.Table(list(rows), column_names=rows._metadata.keys)
 
 
 def make_sql_column(column_name, column, sql_type_kwargs=None, sql_column_kwargs=None, sql_column_type=None):
@@ -167,7 +167,7 @@ def make_sql_column(column_name, column, sql_type_kwargs=None, sql_column_kwargs
                 break
 
     if sql_column_type is None:
-        raise ValueError('Unsupported column type: %s' % column.data_type)
+        raise ValueError(f'Unsupported column type: {column.data_type}')
 
     sql_type_kwargs = sql_type_kwargs or {}
     sql_column_kwargs = sql_column_kwargs or {}
@@ -289,8 +289,7 @@ def to_sql(self, connection_or_string, table_name, overwrite=False,
             number_of_rows = len(self.rows)
             for index in range((number_of_rows - 1) // chunk_size + 1):
                 end_index = (index + 1) * chunk_size
-                if end_index > number_of_rows:
-                    end_index = number_of_rows
+                end_index = min(end_index, number_of_rows)
                 connection.execute(insert, [dict(zip(self.column_names, row)) for row in
                                             self.rows[index * chunk_size:end_index]])
 
@@ -321,12 +320,8 @@ def to_sql_create_statement(self, table_name, dialect=None, db_schema=None, cons
     sql_table = make_sql_table(self, table_name, dialect=dialect, db_schema=db_schema, constraints=constraints,
                                unique_constraint=unique_constraint)
 
-    if dialect:
-        sql_dialect = dialects.registry.load(dialect)()
-    else:
-        sql_dialect = None
-
-    return six.text_type(CreateTable(sql_table).compile(dialect=sql_dialect)).strip() + ';'
+    sql_dialect = dialects.registry.load(dialect)() if dialect else None
+    return f'{six.text_type(CreateTable(sql_table).compile(dialect=sql_dialect)).strip()};'
 
 
 def sql_query(self, query, table_name='agate'):
@@ -354,9 +349,7 @@ def sql_query(self, query, table_name='agate'):
         if q:
             rows = connection.execute(q)
 
-    table = agate.Table(list(rows), column_names=rows._metadata.keys)
-
-    return table
+    return agate.Table(list(rows), column_names=rows._metadata.keys)
 
 
 agate.Table.from_sql = classmethod(from_sql)
